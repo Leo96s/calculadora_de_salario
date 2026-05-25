@@ -1,0 +1,6 @@
+{
+  "name": "Calculadora de Salário",
+  "description": "Calcula o teu salário mensal com base nas horas normais, domingos a dobrar e feriados a triplicar, com histórico e login de utilizador.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

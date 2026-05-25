@@ -1,0 +1,183 @@
+name: Semantic Versioning
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  versioning:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - run: git fetch --tags
+
+      # Última tag
+      - name: Get latest tag
+        run: |
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+          echo "latest_tag=$TAG" >> $GITHUB_ENV
+
+      - name: Git config
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+
+      # REPLAY REAL DAS VERSÕES (por commit)
+      - name: Replay versions per commit
+        run: |
+          CURRENT_TAG=${{ env.latest_tag }}
+
+          if [ "$CURRENT_TAG" = "none" ]; then
+            # Se não existe tag, começamos do 0.0.0 e pegamos TODO o histórico
+            MAJOR=0; MINOR=0; PATCH=0
+            RANGE="HEAD"
+          else
+
+            VERSION=${CURRENT_TAG#v}
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+            RANGE="$CURRENT_TAG..HEAD"
+          fi
+
+          git log --reverse --pretty="%H|%s" $RANGE > commits.txt
+
+          CREATED_TAGS=0
+
+          while IFS='|' read -r SHA MSG; do
+            MSG_LOWER=$(echo "$MSG" | tr '[:upper:]' '[:lower:]')
+            NEW_VERSION=""
+
+            if [[ "$MSG_LOWER" == *"breaking change"* ]]; then
+              MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0
+              NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
+
+            elif [[ "$MSG_LOWER" =~ ^feat(\(.+\))?: ]]; then
+              MINOR=$((MINOR+1)); PATCH=0
+              NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
+
+            elif [[ "$MSG_LOWER" =~ ^(fix|docs|style|test|ci)(\(.+\))?: ]]; then
+              PATCH=$((PATCH+1))
+              NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
+            fi
+
+            if [ -n "$NEW_VERSION" ]; then
+              if git rev-parse "$NEW_VERSION" >/dev/null 2>&1; then
+                echo "Tag $NEW_VERSION already exists"
+              else
+                echo "Tagging $SHA as $NEW_VERSION"
+                git tag "$NEW_VERSION" "$SHA"
+                CREATED_TAGS=1
+              fi
+            fi
+
+          done < commits.txt
+
+          # Caso seja o primeiro commit e não siga o padrão Conventional Commits,
+          if [ "$CURRENT_TAG" = "none" ] && [ "$CREATED_TAGS" = "0" ]; then
+             echo "Nenhum commit formatado encontrado. Criando v0.1.0 inicial..."
+             git tag "v0.1.0" HEAD
+             CREATED_TAGS=1
+             MAJOR=0; MINOR=1; PATCH=0
+          fi
+
+          FINAL_VERSION="v$MAJOR.$MINOR.$PATCH"
+          echo "new_version=$FINAL_VERSION" >> $GITHUB_ENV
+          echo "created_tags=$CREATED_TAGS" >> $GITHUB_ENV
+
+      - name: Stop if no new versions
+        if: env.created_tags == '0'
+        run: echo "No versionable commits."
+
+      #  package.json + lock com as versões atualizadas
+      - name: Update package.json files
+        if: env.created_tags == '1'
+        run: |
+          VERSION=${{ env.new_version }}
+          VERSION=${VERSION#v}
+
+          # Encontra todos os package.json
+          FILES=$(find . -name package.json -not -path "*/node_modules/*")
+
+          if [ -z "$FILES" ]; then
+            echo "No package.json found."
+            exit 0
+          fi
+
+          for FILE in $FILES; do
+            # O jq já vem pré-instalado no ubuntu-latest, não precisa de apt-get
+            jq ".version=\"$VERSION\"" "$FILE" > tmp.json && mv tmp.json "$FILE"
+            git add "$FILE"
+
+            DIR=$(dirname "$FILE")
+
+            # Entra no diretório, atualiza apenas o lock sem disparar scripts de install
+            cd "$DIR"
+            npm install --package-lock-only --legacy-peer-deps
+            git add package-lock.json
+            cd - > /dev/null
+          done
+
+      # CHANGELOG LIMPO
+      - name: Update changelog
+        if: env.created_tags == '1'
+        run: |
+          DATE=$(date +'%Y-%m-%d')
+          VERSION=${{ env.new_version }}
+
+          if [ "${{ env.latest_tag }}" = "none" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${{ env.latest_tag }}..HEAD"
+          fi
+          
+          touch CHANGELOG.md RELEASE_NOTES.md
+
+          LOG=$(git log $RANGE \
+            --pretty=format:"%s" \
+            --no-merges | \
+            grep -Ei "^(feat|fix|docs|style|test|ci)(\(.+\))?:|breaking change" || true)
+
+          if [ -z "$LOG" ]; then
+            echo "No valid commits."
+            exit 0
+          fi
+
+          LOG_FORMATTED=$(echo "$LOG" | sed 's/^/* /')
+
+          echo "## $VERSION - $DATE" > tmp1.md
+          echo "$LOG_FORMATTED" >> tmp1.md
+          cat CHANGELOG.md >> tmp1.md
+          mv tmp1.md CHANGELOG.md
+
+          echo "## $VERSION - $DATE" > tmp2.md
+          echo "$LOG_FORMATTED" >> tmp2.md
+          cat RELEASE_NOTES.md >> tmp2.md
+          mv tmp2.md RELEASE_NOTES.md
+
+          git add CHANGELOG.md RELEASE_NOTES.md
+
+      # Commit automático do bot
+      - name: Commit and Push everything
+        if: env.created_tags == '1'
+        run: |
+          # 1. Faz commit das alterações nos ficheiros (package.json, changelog)
+          git diff --cached --quiet || git commit -m "chore(release): ${{ env.new_version }}"
+          
+          # 2. Empurra o commit para a branch (main/dev)
+          git push origin HEAD
+
+          # 3. Tenta empurrar cada tag individualmente
+          # Isso evita que uma tag rejeitada bloqueie todas as outras
+          for tag in $(git tag --points-at HEAD); do
+            git push origin "$tag" || echo "Tag $tag rejeitada (provavelmente contém alteração de workflow). Ignorando..."
+          done
+          
+          # Tenta empurrar as outras tags criadas no replay (opcional)
+          git push origin --tags || echo "Algumas tags foram rejeitadas, mas o processo continuou."
