@@ -31,3 +31,5 @@ replay_pid*
 /build
 /.build-outputs
 /.build-outputs
+app/google-services.json
+calculadora_salario-keystore
