@@ -354,6 +354,39 @@ para ..." aparece (a chamada real ao Firebase demorou ~4-5s a
 responder — se testares isto, espera o suficiente antes de concluir que
 não aparece nada).
 
+### [x] 4.3 Teclado tapa campos/botão em "Registar Turnos" e engole toques — RESOLVIDO
+
+**Problema:** `RegisterScreen.kt` nunca chamava `imePadding()` nem definia
+`windowSoftInputMode`. Com Dias Normais + Domingos + Feriados preenchidos,
+o conteúdo do formulário passava a ser mais alto do que o espaço visível
+quando o teclado abre. Como o `Scaffold` não reservava espaço para o
+teclado, os campos/botão que ficavam por baixo dele não desapareciam do
+ecrã visualmente cobertos — o Android entregava o toque ao teclado, que
+por acaso tinha uma tecla numérica naquela posição. O resultado, em vez de
+"não dá para tocar", era **reescrever silenciosamente o valor do campo que
+ainda tinha foco** (ex.: tentar tocar em "Feriados" com "Domingos" focado
+inseria dígitos a mais em "Domingos" sem qualquer erro visível).
+
+**Como foi encontrado:** ao testar dinamicamente Domingos+Feriados em
+conjunto, os valores dos campos ficavam corrompidos de forma
+aparentemente aleatória entre toques. A confusão inicial (culpa do script
+de teste vs. bug real da app) só ficou resolvida ao confirmar, por
+`uiautomator dump`, que o foco *nunca* saía do campo "Domingos" mesmo
+depois de tocar exatamente nas coordenadas do campo "Feriados" — e ao
+confirmar por captura de ecrã que o teclado cobria fisicamente esse campo.
+
+**Correção aplicada:** `Modifier.imePadding()` no `Scaffold` de
+`RegisterScreen.kt`, para que o conteúdo encolha e passe a ter scroll
+disponível quando o teclado abre, tal como as restantes áreas com forms.
+
+**Validado no emulador:** reconstruído o APK, reinstalado, reproduzido o
+mesmo teste (Dias Normais 22×8h + Domingos 2×8h + Feriados 1×8h com o
+teclado sempre aberto entre campos) — o formulário agora tem scroll
+disponível com o teclado aberto, o toque no campo Feriados foca-o
+corretamente, o total calculado (5162.00€) bate certo com a soma manual
+(3916 + 712 + 534), e o registo grava e aparece no histórico/gráfico do
+Dashboard sem erros no logcat.
+
 ---
 
 ## Notas
