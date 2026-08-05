@@ -91,23 +91,31 @@ resolver o item 3.1 primeiro.
 
 ---
 
-### [ ] 1.2 Login por nome de utilizador nunca funciona
+### [x] 1.2 Login por nome de utilizador nunca funciona — RESOLVIDO
 
-**Problema:** `AuthManager.loginWithEmail` (`AuthManager.kt:129-162`) faz
-uma query Firestore a `users` por `username` antes de autenticar; a query
-não devolve resultados (confirmado no emulador) e o código cai no
-fallback, passando o username em bruto ao Firebase Auth, que rejeita por
-formato inválido.
+**Problema:** `AuthManager.loginWithEmail` (`AuthManager.kt:129-162`) fazia
+uma query Firestore a `users` por `username` antes de autenticar. Com as
+regras do Firestore agora corretamente fechadas (item 0.1), esta query
+nunca pode funcionar — é um pedido não autenticado, e as regras exigem
+`request.auth != null`. Antes de fechar as regras já falhava por outra
+razão não totalmente esclarecida; com as regras fechadas a causa fica
+definitiva e sem solução sem infraestrutura nova.
 
-**Correção:**
-- Verificar as regras de segurança do Firestore na consola — confirmar se
-  `list`/`get` na coleção `users` está bloqueado para pedidos não
-  autenticados. Se estiver, mover esta resolução username→email para uma
-  Cloud Function (com Admin SDK, que ignora as regras) ou para um índice
-  público só com o campo `username`+`email` (sem dados sensíveis).
-- Alternativa mais simples: remover a opção de login por username e
-  aceitar só email — menos superfície de erro, mas é uma mudança de
-  produto, discutir antes de implementar.
+**Decisão tomada:** remover a opção de login por username, aceitar só
+email. Alternativa de mover a resolução para uma Cloud Function foi
+recusada — exigiria infraestrutura nova (pasta `functions/`, Node.js,
+deploy separado) e mudar o projeto para o plano Blaze (pay-as-you-go).
+
+**Correção aplicada:**
+- `AuthManager.loginWithEmail(email, password)` — removida a resolução
+  username→email e a query Firestore associada.
+- `MainViewModel.login(email, password)` — validação de formato de email
+  igual à já existente em `register()`; mensagens de erro atualizadas.
+- `LoginScreen.kt` — campo passa a chamar-se só "Email"
+  (`testTag("login_email_input")`), com `KeyboardType.Email`.
+
+**Validado no emulador:** login com email e password corretos → entra no
+dashboard sem erro.
 
 **Teste:** criar conta, logout, login com o username escolhido no signup.
 

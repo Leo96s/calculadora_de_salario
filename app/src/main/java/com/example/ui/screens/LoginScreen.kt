@@ -46,7 +46,7 @@ fun LoginScreen(
     onNavigateToDashboard: () -> Unit,
     onNavigateToSignUp: () -> Unit
 ) {
-    var emailOrUsername by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
@@ -165,19 +165,20 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Username field
+                    // Email field
                     OutlinedTextField(
-                        value = emailOrUsername,
-                        onValueChange = { emailOrUsername = it },
-                        label = { Text("Email ou Nome de Utilizador") },
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email") },
                         leadingIcon = {
                             Icon(imageVector = Icons.Default.Person, contentDescription = null)
                         },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("login_email_or_username_input"),
+                            .testTag("login_email_input"),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
                             unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
@@ -249,7 +250,7 @@ fun LoginScreen(
 
                     // Login Button
                     Button(
-                        onClick = { viewModel.login(emailOrUsername, password) },
+                        onClick = { viewModel.login(email, password) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)

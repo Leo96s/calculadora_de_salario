@@ -126,30 +126,14 @@ object AuthManager {
         }
     }
 
-    suspend fun loginWithEmail(emailOrUsername: String, password: String): Boolean {
+    suspend fun loginWithEmail(email: String, password: String): Boolean {
         return try {
-            // Se for email, usa diretamente
-            val emailToUse = if (emailOrUsername.contains("@")) {
-                emailOrUsername
-            } else {
-                // Se for username, procura o email correspondente
-                val user = FirebaseManager.firestore?.collection("users")
-                    ?.whereEqualTo("username", emailOrUsername)
-                    ?.get()
-                    ?.await()
-                    ?.documents
-                    ?.firstOrNull()
-
-                user?.getString("email") ?: emailOrUsername
-            }
-
-            // Faz login com o email
-            val result = FirebaseManager.auth?.signInWithEmailAndPassword(emailToUse, password)?.await()
+            val result = FirebaseManager.auth?.signInWithEmailAndPassword(email, password)?.await()
 
             if (result?.user != null) {
                 _isUserLoggedIn.value = true
                 _currentUserId.value = result.user!!.uid
-                Log.d(TAG, "User logged in: $emailToUse")
+                Log.d(TAG, "User logged in: $email")
                 true
             } else {
                 Log.e(TAG, "Login failed")

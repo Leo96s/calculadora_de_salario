@@ -161,21 +161,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // User Operations
-    fun login(emailOrUsername: String, password: String) {
-        if (emailOrUsername.isBlank() || password.isBlank()) {
-            _authError.value = "Email/Nome e palavra-passe são obrigatórios"
+    fun login(email: String, password: String) {
+        if (email.isBlank() || password.isBlank()) {
+            _authError.value = "Email e palavra-passe são obrigatórios"
+            return
+        }
+
+        if (!email.contains("@")) {
+            _authError.value = "Email inválido"
             return
         }
 
         // Autentica com Firebase
         viewModelScope.launch {
             try {
-                val success = AuthManager.loginWithEmail(emailOrUsername, password)
+                val success = AuthManager.loginWithEmail(email, password)
                 if (success) {
                     _authSuccess.value = true
-                    Log.d("MainViewModel", "User login: $emailOrUsername")
+                    Log.d("MainViewModel", "User login: $email")
                 } else {
-                    _authError.value = "Email/Nome ou palavra-passe incorretos"
+                    _authError.value = "Email ou palavra-passe incorretos"
                 }
             } catch (e: Exception) {
                 _authError.value = "Erro de login: ${e.message}"
