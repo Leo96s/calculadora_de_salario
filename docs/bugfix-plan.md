@@ -288,21 +288,29 @@ sucesso, 4 de 4 testes continuam a passar.
 
 ---
 
-### [ ] 3.3 README.md e metadata.json desatualizados
+### [x] 3.3 README.md e metadata.json desatualizados — RESOLVIDO
 
-**Problema:** ainda é o boilerplate genérico "AI Studio" — fala de
+**Problema:** era o boilerplate genérico "AI Studio" — falava de
 `GEMINI_API_KEY`, de uma linha `signingConfig = signingConfigs.getByName
-("debugConfig")` que já não existe no `build.gradle.kts`, e não documenta
-o setup real (Firebase: onde pôr `google-services.json`, como ativar
-Auth/Firestore; keystore de release: variáveis de ambiente
+("debugConfig")` que já não existia no `build.gradle.kts`, e não
+documentava o setup real (Firebase: onde pôr `google-services.json`, como
+ativar Auth/Firestore; keystore de release: variáveis de ambiente
 `KEYSTORE_PATH`/`STORE_PASSWORD`/`KEY_PASSWORD`).
 
-**Correção:** reescrever o README com os passos reais de setup deste
-projeto. Rever `metadata.json` e remover/corrigir referências à capacidade
-Gemini que não se aplicam.
+**Correção aplicada:** README reescrito com os passos reais — setup do
+Firebase (Authentication Email/Password + Google, Firestore, deploy de
+`firestore.rules`, onde colocar `google-services.json`), esclarecimento
+de que o `.env`/`GEMINI_API_KEY` é um resquício do template original e
+não é usado por esta app, e as variáveis de ambiente corretas para um
+build de release assinado. `metadata.json`:
+`majorCapabilities` deixou de referir `MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API`
+(não se aplica, `firebase-ai` está comentado nas dependências).
 
-**Teste:** seguir o README do zero num ambiente limpo e confirmar que a
-app corre.
+**Validado:** conteúdo cruzado com o `build.gradle.kts`, `.gitignore` e
+`firestore.rules` reais do repo; `./gradlew assembleDebug` continua a
+funcionar depois da alteração. Não foi possível testar "de um ambiente
+limpo" à letra (exigiria um checkout novo sem `google-services.json` nem
+histórico de sessão) — validação feita por revisão cruzada do conteúdo.
 
 ---
 
