@@ -1,2 +1,2 @@
-## v1.2.18 - 2026-08-05
-* ci: sync mobile-release.yml (idempotency + change-detection fixes)
+## v1.2.19 - 2026-08-05
+* ci: sync mobile-release.yml (.github diff exclusion) and add version marker
