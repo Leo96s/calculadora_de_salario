@@ -1,3 +1,7 @@
+## v1.2.13 - 2026-08-05
+* fix(register): reserve space for keyboard on Registar Turnos form
+* fix(auth): show Snackbar for uiMessage on LoginScreen
+* fix(profile): persist default hourly rate edit to Firestore
 ## v1.2.10 - 2026-08-05
 * docs: rewrite README with real Firebase setup steps
 * fix(test): initialize FirebaseApp in Robolectric tests
