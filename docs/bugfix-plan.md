@@ -193,15 +193,18 @@ sem `PERMISSION_DENIED`) → botão de sincronizar não reporta erros.
 
 ---
 
-### [ ] 2.2 `.gitignore` não cobre google-services.json nem a keystore
+### [x] 2.2 `.gitignore` não cobre google-services.json nem a keystore — RESOLVIDO
 
 **Problema:** `app/google-services.json` e `calculadora_salario-keystore`
-não estão listados em nenhum `.gitignore` (só `debug.keystore` está).
+não estavam listados em nenhum `.gitignore` (só `debug.keystore` estava).
 
-**Correção:** adicionar ambos os nomes ao `.gitignore` da raiz.
+**Correção aplicada:** adicionados `*.keystore`, `*-keystore`, `*.jks` e
+`google-services.json` ao `.gitignore` da raiz (o nome exato
+`calculadora_salario-keystore` não tem extensão `.keystore`, daí o padrão
+`*-keystore` à parte).
 
-**Teste:** `git status` depois de os ficheiros existirem no disco — não
-devem aparecer como untracked/stageable.
+**Validado:** `git status` já não lista nenhum dos dois ficheiros como
+untracked.
 
 ---
 
