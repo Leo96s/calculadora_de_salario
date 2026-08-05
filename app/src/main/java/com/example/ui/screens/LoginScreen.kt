@@ -73,6 +73,7 @@ fun LoginScreen(
     }
 
     val authSuccess by viewModel.authSuccess.collectAsState()
+    val uiMessage by viewModel.uiMessage.collectAsState()
 
     LaunchedEffect(authSuccess) {
         if (authSuccess) {
@@ -83,6 +84,14 @@ fun LoginScreen(
 
     LaunchedEffect(Unit) {
         viewModel.clearAuthStates()
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(uiMessage) {
+        uiMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearUiMessage()
+        }
     }
 
     Box(
@@ -417,5 +426,10 @@ fun LoginScreen(
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }

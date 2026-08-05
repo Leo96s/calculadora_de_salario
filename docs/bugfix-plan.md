@@ -314,6 +314,48 @@ histórico de sessão) — validação feita por revisão cruzada do conteúdo.
 
 ---
 
+## Fase 4 — Encontrados na reteste pós-Fase-3 (2026-08-05)
+
+### [x] 4.1 Editar o preço/hora padrão não persiste — RESOLVIDO
+
+**Problema:** `MainViewModel.updateDefaultRate()` só gravava o novo valor
+na tabela local `users` (Room), nunca no Firestore. Como
+`refreshCurrentUser()` volta a ler o perfil do Firestore e sobrescreve a
+tabela local a cada entrada no Dashboard (incluindo depois de reiniciar a
+app), a edição parecia funcionar (mensagem de sucesso, UI atualizada) mas
+era sempre silenciosamente desfeita a seguir.
+
+**Correção aplicada:** novo `AuthManager.updateHourlyRate(uid, rate)`, que
+escreve o campo no Firestore (`update`, não reescreve o documento
+inteiro). `updateDefaultRate()` só atualiza o estado local/UI se essa
+escrita tiver sucesso; caso contrário mostra um erro em vez de fingir que
+funcionou.
+
+**Validado no emulador:** editar o preço/hora → mensagem de sucesso →
+fechar e reabrir a app → valor novo mantido (antes da correção, revertia
+para o valor antigo).
+
+### [x] 4.2 `LoginScreen` não mostra a mensagem de recuperação de password — RESOLVIDO
+
+**Problema:** `LoginScreen.kt` nunca observava `viewModel.uiMessage` nem
+tinha `SnackbarHost` nenhum — só `DashboardScreen` e (desde o item 1.1)
+`RegisterScreen` tinham isto. Qualquer mensagem definida por
+`recoverPassword()` (sucesso ou o "pedido enviado" genérico do catch)
+nunca chegava a aparecer; o diálogo simplesmente fechava sem feedback
+nenhum.
+
+**Correção aplicada:** adicionado `SnackbarHost` + observer de
+`uiMessage` ao `LoginScreen`, mesmo padrão do `RegisterScreen`/
+`DashboardScreen`.
+
+**Validado no emulador:** "Esqueceu-se da senha?" → inserir email →
+"Enviar Link" → snackbar "Email de recuperação enviado com sucesso
+para ..." aparece (a chamada real ao Firebase demorou ~4-5s a
+responder — se testares isto, espera o suficiente antes de concluir que
+não aparece nada).
+
+---
+
 ## Notas
 
 - Cada item marcado como resolvido deve ter passado pelo teste descrito
