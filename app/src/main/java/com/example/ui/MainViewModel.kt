@@ -30,6 +30,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
+    // true enquanto o perfil ainda não foi pedido ao Firebase pela primeira vez.
+    // Sem isto, currentUser == null é ambíguo entre "ainda a carregar" e
+    // "pedido concluído, sem perfil encontrado" — o ecrã ficaria preso no
+    // estado de loading para sempre neste segundo caso.
+    private val _isProfileLoading = MutableStateFlow(true)
+    val isProfileLoading: StateFlow<Boolean> = _isProfileLoading.asStateFlow()
+
     private val _authError = MutableStateFlow<String?>(null)
     val authError: StateFlow<String?> = _authError.asStateFlow()
 
@@ -67,11 +74,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Mantém a tabela local `users` sincronizada com o perfil Firebase, para que
     // a foreign key de SalaryRecord.userId -> User.uid não falhe ao gravar.
     private suspend fun refreshCurrentUser() {
+        _isProfileLoading.value = true
         val user = AuthManager.getCurrentUserData()
         if (user != null) {
             repository.upsertUser(user)
         }
         _currentUser.value = user
+        _isProfileLoading.value = false
     }
     // List of records for active user
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)

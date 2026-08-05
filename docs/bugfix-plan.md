@@ -137,23 +137,35 @@ já não aparece lá.
 
 ---
 
-### [ ] 1.4 Perfil mostra "Utilizador" genérico depois de login
+### [x] 1.4 Perfil mostra "Utilizador" genérico depois de login — RESOLVIDO
 
-**Problema:** observado uma vez no emulador — depois de um login (não
-signup) bem-sucedido, o dashboard mostrou "Olá, Utilizador!" em vez do
-nome real, sem erro no logcat. Suspeita: corrida entre a navegação para o
-dashboard e o fetch assíncrono em `AuthManager.getCurrentUserData()`.
+**Problema:** depois de um login (não signup) bem-sucedido, o dashboard
+mostrava "Olá, Utilizador!" em vez do nome real, sem erro no logcat.
+Confirmado: não era corrida nem bug de rede — `currentUser == null`
+significava tanto "ainda a carregar" como "pedido concluído, sem perfil",
+e a UI usava sempre o fallback "Utilizador" para os dois casos.
 
-**Correção:**
-- Adicionar um estado de "a carregar perfil" no `DashboardScreen` (ex.:
-  `currentUser == null` → mostrar skeleton/loading em vez do fallback
-  "Utilizador" imediatamente).
-- Investigar se `loadCurrentUser()` devia ser `await`ado antes de mostrar
-  o conteúdo, ou se basta o loading state.
+**Correção aplicada:**
+- Novo `MainViewModel.isProfileLoading: StateFlow<Boolean>`, `true` até
+  `refreshCurrentUser()` terminar (sucesso ou não).
+- `DashboardScreen` passou a ter 3 estados em vez de 2: a carregar
+  (`ProfileLoadingCard`, spinner) → perfil encontrado (`ProfileWelcomeCard`
+  com os dados reais) → perfil não encontrado (`ProfileWelcomeCard` com o
+  fallback "Utilizador", só depois do pedido terminar).
 
-**Teste:** criar conta nova, logout, login imediato — repetir 5-10x e
-confirmar que o nome real aparece sempre (ou perceber em que condição
-falha).
+**Bug descoberto ao validar:** a primeira versão só olhava para
+`currentUser == null` para mostrar o loading, sem um terceiro estado —
+isso fazia com que uma conta cujo perfil Firestore não existisse (ex.
+apagado manualmente) ficasse **presa no spinner para sempre**, porque o
+pedido terminava com sucesso mas `user` continuava `null`. Cheguei a
+suspeitar de um hang genuíno do Firebase/Play Services (cheguei a reiniciar
+o emulador todo a investigar) antes de perceber que a conta de teste usada
+não tinha documento Firestore (apagado numa limpeza anterior desta
+sessão). Corrigido com o `isProfileLoading` acima.
+
+**Validado no emulador:** conta com perfil intacto → loading breve e
+depois nome real; conta sem documento Firestore → loading breve e depois
+o fallback "Utilizador" (não fica presa).
 
 ---
 

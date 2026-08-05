@@ -53,6 +53,7 @@ fun DashboardScreen(
     onNavigateToRegister: () -> Unit
 ) {
     val currentUser by viewModel.currentUser.collectAsState()
+    val isProfileLoading by viewModel.isProfileLoading.collectAsState()
     val records by viewModel.salaryRecords.collectAsState()
     val liveCalc by viewModel.liveCalculation.collectAsState()
     val syncing by viewModel.syncing.collectAsState()
@@ -219,12 +220,25 @@ fun DashboardScreen(
         ) {
             // 1. Profile Welcome Card
             item {
-                ProfileWelcomeCard(
-                    username = currentUser?.username ?: "Utilizador",
-                    email = currentUser?.email ?: "",
-                    defaultRate = currentUser?.hourlyRate ?: 10.0,
-                    lastSyncTime = lastSynced
-                )
+                val user = currentUser
+                when {
+                    isProfileLoading -> ProfileLoadingCard()
+                    user != null -> ProfileWelcomeCard(
+                        username = user.username,
+                        email = user.email,
+                        defaultRate = user.hourlyRate,
+                        lastSyncTime = lastSynced
+                    )
+                    // Pedido concluído mas sem perfil (ex. conta sem documento
+                    // Firestore) — mostra o fallback em vez de ficar preso a
+                    // carregar para sempre.
+                    else -> ProfileWelcomeCard(
+                        username = "Utilizador",
+                        email = "",
+                        defaultRate = 10.0,
+                        lastSyncTime = lastSynced
+                    )
+                }
             }
 
             // 2. Previsão de Recebimento Card
@@ -556,6 +570,37 @@ fun ProfileWelcomeCard(
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun ProfileLoadingCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+                .height(52.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(28.dp),
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 3.dp
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = "A carregar perfil...",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            )
         }
     }
 }
