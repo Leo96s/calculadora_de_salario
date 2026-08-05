@@ -91,37 +91,47 @@ object AuthManager {
     }
 
     suspend fun registerWithEmail(email: String, username: String, password: String, hourlyRate: Double): Boolean {
-        return try {
-            // Cria utilizador no Firebase Auth
-            val result = FirebaseManager.auth?.createUserWithEmailAndPassword(email, password)?.await()
-
-            if (result?.user != null) {
-                val userId = result.user!!.uid
-
-                // Guarda os dados do utilizador no Firestore
-                val userData = hashMapOf(
-                    "uid" to userId,
-                    "email" to email,
-                    "username" to username,
-                    "hourlyRate" to hourlyRate,
-                    "createdAt" to System.currentTimeMillis()
-                )
-
-                FirebaseManager.firestore?.collection("users")
-                    ?.document(userId)
-                    ?.set(userData)
-                    ?.await()
-
-                _isUserLoggedIn.value = true
-                _currentUserId.value = userId
-                Log.d(TAG, "User registered successfully: $email")
-                true
-            } else {
-                Log.e(TAG, "Registration failed")
-                false
-            }
+        // Cria utilizador no Firebase Auth
+        val user = try {
+            FirebaseManager.auth?.createUserWithEmailAndPassword(email, password)?.await()?.user
         } catch (e: Exception) {
             Log.e(TAG, "Registration error", e)
+            null
+        }
+
+        if (user == null) {
+            Log.e(TAG, "Registration failed")
+            return false
+        }
+
+        // Guarda os dados do utilizador no Firestore
+        val userData = hashMapOf(
+            "uid" to user.uid,
+            "email" to email,
+            "username" to username,
+            "hourlyRate" to hourlyRate,
+            "createdAt" to System.currentTimeMillis()
+        )
+
+        return try {
+            FirebaseManager.firestore?.collection("users")
+                ?.document(user.uid)
+                ?.set(userData)
+                ?.await()
+
+            _isUserLoggedIn.value = true
+            _currentUserId.value = user.uid
+            Log.d(TAG, "User registered successfully: $email")
+            true
+        } catch (e: Exception) {
+            // Sem isto, a conta Auth ficava órfã (sem perfil), e o próximo
+            // registo com o mesmo email falhava com "email already in use".
+            Log.e(TAG, "Failed to save profile, rolling back auth account", e)
+            try {
+                user.delete().await()
+            } catch (deleteError: Exception) {
+                Log.e(TAG, "Failed to rollback auth account after profile write failure", deleteError)
+            }
             false
         }
     }
