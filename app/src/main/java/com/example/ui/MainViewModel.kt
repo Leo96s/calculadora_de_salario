@@ -284,10 +284,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val user = _currentUser.value ?: return
         val rate = parseDoubleSafely(rateStr) ?: return
         viewModelScope.launch {
-            val updatedUser = user.copy(hourlyRate = rate)
-            repository.updateUserProfile(updatedUser)
-            _currentUser.value = updatedUser
-            _uiMessage.value = "Preço/Hora padrão atualizado para ${"%.2f".format(rate)}€"
+            // Tem de gravar no Firestore primeiro: refreshCurrentUser() volta a
+            // ler de lá a cada entrada no Dashboard e sobrepõe a tabela local
+            // (upsertUser), por isso uma escrita só local acaba sempre
+            // silenciosamente desfeita na próxima vez que o perfil recarrega.
+            val cloudOk = AuthManager.updateHourlyRate(user.uid, rate)
+            if (cloudOk) {
+                val updatedUser = user.copy(hourlyRate = rate)
+                repository.updateUserProfile(updatedUser)
+                _currentUser.value = updatedUser
+                _uiMessage.value = "Preço/Hora padrão atualizado para ${"%.2f".format(rate)}€"
+            } else {
+                _uiMessage.value = "Não foi possível atualizar o preço/hora. Tenta novamente."
+            }
         }
     }
 

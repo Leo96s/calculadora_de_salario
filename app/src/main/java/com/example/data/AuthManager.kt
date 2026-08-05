@@ -136,6 +136,19 @@ object AuthManager {
         }
     }
 
+    suspend fun updateHourlyRate(uid: String, hourlyRate: Double): Boolean {
+        return try {
+            FirebaseManager.firestore?.collection("users")
+                ?.document(uid)
+                ?.update("hourlyRate", hourlyRate)
+                ?.await()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update hourly rate", e)
+            false
+        }
+    }
+
     suspend fun loginWithEmail(email: String, password: String): Boolean {
         return try {
             val result = FirebaseManager.auth?.signInWithEmailAndPassword(email, password)?.await()
