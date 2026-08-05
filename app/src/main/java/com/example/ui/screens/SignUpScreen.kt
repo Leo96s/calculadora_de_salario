@@ -81,6 +81,10 @@ fun SignUpScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.clearAuthStates()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()

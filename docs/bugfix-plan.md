@@ -121,18 +121,19 @@ dashboard sem erro.
 
 ---
 
-### [ ] 1.3 Mensagens de erro ficam coladas ao trocar de ecrã
+### [x] 1.3 Mensagens de erro ficam coladas ao trocar de ecrã — RESOLVIDO
 
 **Problema:** `authError`/`authSuccess` em `MainViewModel.kt` são estado
 partilhado a nível de app, nunca limpo ao entrar num ecrã novo. Um erro do
-Login fica visível ao navegar para o SignUp (e vice-versa).
+Login ficava visível ao navegar para o SignUp (e vice-versa).
 
-**Correção:** em `LoginScreen.kt` e `SignUpScreen.kt`, adicionar
+**Correção aplicada:** em `LoginScreen.kt` e `SignUpScreen.kt`, adicionado
 `LaunchedEffect(Unit) { viewModel.clearAuthStates() }` à entrada do
 composable.
 
-**Teste:** no Login, submeter formulário vazio (erro aparece) → ir para
-"Criar Conta" → confirmar que o erro do Login não aparece lá.
+**Validado no emulador:** no Login, submeti formulário vazio (erro
+aparece) → naveguei para "Criar Conta" → confirmado que o erro do Login
+já não aparece lá.
 
 ---
 
