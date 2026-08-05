@@ -1,3 +1,5 @@
+## v1.2.18 - 2026-08-05
+* ci: sync mobile-release.yml (idempotency + change-detection fixes)
 ## v1.2.17 - 2026-08-05
 * fix(ci): mark gradlew as executable
 ## v1.2.16 - 2026-08-05
