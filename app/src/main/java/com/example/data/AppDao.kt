@@ -6,15 +6,6 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface AppDao {
     // User related queries
-    @Query("SELECT * FROM users WHERE username = :username LIMIT 1")
-    suspend fun getUserByUsername(username: String): User?
-
-    @Query("SELECT * FROM users WHERE uid = :userId LIMIT 1")
-    suspend fun getUserById(userId: Int): User?
-
-    @Insert(onConflict = OnConflictStrategy.ABORT)
-    suspend fun insertUser(user: User): Long
-
     // @Upsert atualiza a linha existente em vez de a apagar e reinserir: um
     // REPLACE via @Insert apagaria a linha antiga e, por causa do
     // onDelete = CASCADE em SalaryRecord.userId, apagava também em catadupa

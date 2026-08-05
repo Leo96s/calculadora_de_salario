@@ -266,20 +266,25 @@ falhas (confirmado nos ficheiros XML de resultado).
 
 ---
 
-### [ ] 3.2 Remover código morto da migração para Firebase
+### [x] 3.2 Remover código morto da migração para Firebase — RESOLVIDO
 
 **Problema:** `AppRepository`/`AppDao` (`registerUser`, `authenticateUser`,
-`getUserById`) e `MainViewModel.loginWithGoogle(email, displayName)` nunca
-são chamados pela UI (confirmado por grep) — remanescentes do sistema de
-auth local anterior ao Firebase. `AppDao.getUserById(Int)` compara com uma
-coluna `uid` que é `String` — nunca poderia funcionar mesmo se fosse
-usado.
+`getUserById`, `getUserByUsername`, `insertUser`, `hashPassword`) e
+`MainViewModel.loginWithGoogle(email, displayName)` nunca eram chamados
+pela UI (confirmado por grep) — remanescentes do sistema de auth local
+anterior ao Firebase. `AppDao.getUserById(Int)` comparava com uma coluna
+`uid` que é `String` — nunca poderia funcionar mesmo se fosse usado.
 
-**Correção:** apagar essas funções/métodos não usados. Confirmar por grep
-antes de apagar que continuam mesmo sem chamadores.
+**Correção aplicada:** removidas todas as funções acima. Também removido
+`MainViewModel.hourlyRateInput` — ficou órfão depois de 1) o fix do item
+1.1 (que passou a usar `user.hourlyRate` diretamente) e 2) esta remoção
+(era o único outro sítio que ainda o escrevia, dentro do `loginWithGoogle`
+agora removido). `User.passwordHash` e o índice único em `username`
+ficaram intactos — são campos de entidade/schema, não funções não usadas,
+fora do âmbito deste item.
 
-**Teste:** projeto continua a compilar depois da remoção; testes existentes
-continuam a passar.
+**Validado:** `./gradlew testDebugUnitTest` e `./gradlew assembleDebug` →
+sucesso, 4 de 4 testes continuam a passar.
 
 ---
 

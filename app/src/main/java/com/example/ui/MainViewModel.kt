@@ -44,7 +44,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val authSuccess: StateFlow<Boolean> = _authSuccess.asStateFlow()
 
     // Salary Input States
-    val hourlyRateInput = MutableStateFlow("")
     val hoursPerDayInput = MutableStateFlow("8")
     val daysOffPerWeekInput = MutableStateFlow("2")
     val days8hInput = MutableStateFlow("22")
@@ -241,31 +240,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 _authError.value = "Erro: ${e.message}"
                 Log.e("MainViewModel", "Registration error", e)
-            }
-        }
-    }
-
-    fun loginWithGoogle(email: String, displayName: String) {
-        viewModelScope.launch {
-            _syncing.value = true
-            try {
-                var localUser = repository.getUserByUsername(email)
-                if (localUser == null) {
-                    repository.registerUser(email, "google_oauth_fallback", 10.0)
-                    localUser = repository.getUserByUsername(email)
-                }
-                _currentUser.value = localUser
-                _authSuccess.value = true
-                _authError.value = null
-                if (localUser != null) {
-                    hourlyRateInput.value = localUser.hourlyRate.toString()
-                }
-                _uiMessage.value = "Sessão iniciada via Google: $displayName"
-                syncCloudRecords(email)
-            } catch (e: Exception) {
-                _authError.value = "Erro no login de Google: ${e.localizedMessage}"
-            } finally {
-                _syncing.value = false
             }
         }
     }
