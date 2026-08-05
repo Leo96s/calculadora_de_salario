@@ -13,6 +13,39 @@ impede a app de ser usável.
 
 ---
 
+## Fase 0 — Segurança crítica
+
+### [x] 0.1 Firestore sem nenhuma regra de acesso — RESOLVIDO
+
+**Problema:** descoberto ao investigar a causa raiz do item 1.2. As regras
+de segurança do Firestore do projeto `calculadora-salario-6c4b8` estavam
+completamente abertas — confirmado com um pedido HTTP sem autenticação à
+coleção `users`, que devolveu `200 OK` com documentos reais (email,
+preço/hora de contas reais). Qualquer pessoa na internet conseguia ler (e
+muito provavelmente escrever) todos os perfis e registos salariais de
+todos os utilizadores.
+
+**Correção aplicada:** criado `firestore.rules` (+ `firebase.json` mínimo)
+restringindo `users/{userId}` e `users/{userId}/salary_records/{recordId}`
+a `request.auth != null && request.auth.uid == userId`, e negando tudo o
+resto por omissão. Deploy feito via `firebase deploy --only
+firestore:rules --project calculadora-salario-6c4b8`.
+
+**Validado:** pedido anónimo à coleção `users` passou a devolver `403
+PERMISSION_DENIED`. Testado no emulador com conta nova: signup, leitura do
+perfil e gravação local de um registo continuam a funcionar normalmente
+com utilizador autenticado.
+
+**Efeito colateral esperado (não é regressão):** a sincronização cloud dos
+registos salariais (`FirebaseManager.saveRecordToCloud`) passou a falhar
+com `PERMISSION_DENIED` — porque grava em `users/{username}/...` em vez
+de `users/{uid}/...` (o bug já descrito no item 2.1). Antes, isto
+"funcionava" só porque não havia nenhuma regra a impedir escrever no sítio
+errado; a base de dados local não é afetada. Resolver o item 2.1 restaura
+a sincronização, agora da forma correta.
+
+---
+
 ## Fase 1 — Bloqueantes (a app não funciona sem isto)
 
 ### [x] 1.1 Guardar registo mensal não faz nada — RESOLVIDO
