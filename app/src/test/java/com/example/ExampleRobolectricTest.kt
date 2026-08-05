@@ -36,7 +36,7 @@ class ExampleRobolectricTest {
     assertEquals("0", viewModel.days4hInput.value)
 
     // Register a user
-    viewModel.register("leonardo", "pass123", "12.5")
+    viewModel.register("leonardo@example.com", "leonardo", "pass123", "12.5")
     
     // Auth should succeed
     assertTrue(viewModel.authSuccess.value || viewModel.authError.value == null)

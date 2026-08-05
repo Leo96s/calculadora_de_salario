@@ -23,7 +23,7 @@ class AppRepository(private val appDao: AppDao) {
         val newUser = User(
             username = username,
             passwordHash = hashedPassword,
-            defaultHourlyRate = defaultHourlyRate
+            hourlyRate = defaultHourlyRate
         )
         appDao.insertUser(newUser)
         return true
@@ -39,12 +39,16 @@ class AppRepository(private val appDao: AppDao) {
         appDao.updateUser(user)
     }
 
+    suspend fun upsertUser(user: User) {
+        appDao.upsertUser(user)
+    }
+
     // SalaryRecord Operations
-    fun getSalaryRecordsForUser(userId: Int): Flow<List<SalaryRecord>> {
+    fun getSalaryRecordsForUser(userId: String): Flow<List<SalaryRecord>> {
         return appDao.getSalaryRecordsForUser(userId)
     }
 
-    suspend fun getSalaryRecordByMonth(userId: Int, monthYear: String): SalaryRecord? {
+    suspend fun getSalaryRecordByMonth(userId: String, monthYear: String): SalaryRecord? {
         return appDao.getSalaryRecordByMonth(userId, monthYear)
     }
 

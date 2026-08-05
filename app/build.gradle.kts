@@ -4,7 +4,7 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
-  id("com.google.gms.google-services")
+  alias(libs.plugins.google.services)
 }
 
 android {
@@ -68,6 +68,9 @@ secrets {
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
+  implementation(libs.firebase.auth)
+  implementation(libs.firebase.firestore)
+  implementation(libs.play.services.auth)
   // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
   // implementation(libs.androidx.camera.camera2)
@@ -116,7 +119,4 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
-
-  implementation(platform("com.google.firebase:firebase-bom:34.13.0"))
-  implementation("com.google.firebase:firebase-analytics")
 }

@@ -34,9 +34,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewModelScope
+import com.example.data.AuthManager
 import com.example.data.SalaryRecord
+import com.example.data.User
 import com.example.ui.MainViewModel
 import com.example.ui.DayWorkGroup
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -69,12 +74,8 @@ fun DashboardScreen(
         }
     }
 
-    LaunchedEffect(currentUser) {
-        if (currentUser == null) {
-            onNavigateToLogin()
-        } else {
-            defaultRateInput = currentUser?.defaultHourlyRate?.toString() ?: ""
-        }
+    LaunchedEffect(Unit) {
+        viewModel.loadCurrentUser()
     }
 
     Scaffold(
@@ -147,7 +148,12 @@ fun DashboardScreen(
                     }
 
                     IconButton(
-                        onClick = { viewModel.logout() },
+                        onClick = { viewModel.viewModelScope.launch {
+                            AuthManager.signOut()
+                            delay(500) // Espera um pouco antes de navegar
+                            onNavigateToLogin()
+                            }
+                                  },
                         modifier = Modifier
                             .background(
                                 color = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
@@ -215,8 +221,8 @@ fun DashboardScreen(
             item {
                 ProfileWelcomeCard(
                     username = currentUser?.username ?: "Utilizador",
-                    email = "leonardosilva.00009@gmail.com", // Dynamic email matching user metadata
-                    defaultRate = currentUser?.defaultHourlyRate ?: 10.0,
+                    email = currentUser?.email ?: "",
+                    defaultRate = currentUser?.hourlyRate ?: 10.0,
                     lastSyncTime = lastSynced
                 )
             }
@@ -559,7 +565,8 @@ fun CalculatorFormCard(
     viewModel: MainViewModel,
     onOpenMonthPicker: () -> Unit
 ) {
-    val rate by viewModel.hourlyRateInput.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
+    val rate = currentUser?.hourlyRate.toString() ?: ""
     val normalDays by viewModel.normalDaysList.collectAsState()
     val sundays by viewModel.sundaysList.collectAsState()
     val holidays by viewModel.holidaysList.collectAsState()
@@ -623,7 +630,8 @@ fun CalculatorFormCard(
             // Hourly rate (master setting)
             OutlinedTextField(
                 value = rate,
-                onValueChange = { viewModel.hourlyRateInput.value = it },
+                onValueChange = { },
+                readOnly = true,
                 label = { Text("Preço Hora (€)") },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number,

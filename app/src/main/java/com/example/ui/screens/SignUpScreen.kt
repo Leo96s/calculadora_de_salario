@@ -1,6 +1,11 @@
 package com.example.ui.screens
 
+import android.app.Activity
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,11 +19,13 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -27,6 +34,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.FirebaseManager
 import com.example.ui.MainViewModel
 
 @Composable
@@ -35,13 +43,36 @@ fun SignUpScreen(
     onNavigateBack: () -> Unit,
     onNavigateToDashboard: () -> Unit
 ) {
+    var email by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var hourlyRateStr by remember { mutableStateOf("10.0") }
     var passwordVisible by remember { mutableStateOf(false) }
 
-    val authSuccess by viewModel.authSuccess.collectAsState()
+    val context = LocalContext.current
     val authError by viewModel.authError.collectAsState()
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                if (account != null && account.idToken != null) {
+                    // Chama com idToken real - só entra se o Google Sign-In foi bem-sucedido
+                    viewModel.loginWithGoogleIdToken(account.idToken!!)
+                }
+                // Se account for null ou não tiver idToken, não faz nada (fica na tela de signup)
+            } catch (e: Exception) {
+                Log.e("SignUpScreen", "Google Sign-In failed", e)
+                // Se houver erro, não entra (fica na tela)
+            }
+        }
+        // Se cancelar (resultCode != RESULT_OK), não faz nada
+    }
+
+    val authSuccess by viewModel.authSuccess.collectAsState()
 
     LaunchedEffect(authSuccess) {
         if (authSuccess) {
@@ -120,6 +151,27 @@ fun SignUpScreen(
                         .fillMaxWidth()
                         .padding(24.dp)
                 ) {
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email") },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Default.Person, contentDescription = null)
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("signup_email_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     // Username
                     OutlinedTextField(
                         value = username,
@@ -210,7 +262,7 @@ fun SignUpScreen(
 
                     // Register Button
                     Button(
-                        onClick = { viewModel.register(username, password, hourlyRateStr) },
+                        onClick = { viewModel.register(email,username, password, hourlyRateStr) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
@@ -226,6 +278,74 @@ fun SignUpScreen(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+                        Text(
+                            text = "ou",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Google Sign-Up Button
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+                                )
+                                    .requestEmail()
+                                    .build()
+                                val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+                                launcher.launch(googleSignInClient.signInIntent)
+                            } catch (e: Exception) {
+                                Log.e("SignUpScreen", "Google Sign-In setup failed", e)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("google_signup_button"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = "Google Icon",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Registar com o Google",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

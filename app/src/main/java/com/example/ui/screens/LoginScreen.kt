@@ -1,6 +1,11 @@
 package com.example.ui.screens
 
+import android.app.Activity
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,6 +17,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -29,6 +36,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.MainViewModel
+import androidx.compose.runtime.LaunchedEffect
+import com.example.data.AuthManager
+import com.example.data.FirebaseManager
 
 @Composable
 fun LoginScreen(
@@ -36,12 +46,33 @@ fun LoginScreen(
     onNavigateToDashboard: () -> Unit,
     onNavigateToSignUp: () -> Unit
 ) {
-    var username by remember { mutableStateOf("") }
+    var emailOrUsername by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
-    val authSuccess by viewModel.authSuccess.collectAsState()
+    var showRecoveryDialog by remember { mutableStateOf(false) }
+    var recoveryEmail by remember { mutableStateOf("") }
+
+    val context = LocalContext.current
     val authError by viewModel.authError.collectAsState()
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                if (account != null && account.idToken != null) {
+                    // Chama a função de login do AuthManager
+                    viewModel.loginWithGoogleIdToken(account.idToken!!)
+                }
+            } catch (e: Exception) {
+                Log.e("LoginScreen", "Google Sign-In failed", e)
+            }
+        }
+    }
+
+    val authSuccess by viewModel.authSuccess.collectAsState()
 
     LaunchedEffect(authSuccess) {
         if (authSuccess) {
@@ -136,9 +167,9 @@ fun LoginScreen(
 
                     // Username field
                     OutlinedTextField(
-                        value = username,
-                        onValueChange = { username = it },
-                        label = { Text("Nome de Utilizador") },
+                        value = emailOrUsername,
+                        onValueChange = { emailOrUsername = it },
+                        label = { Text("Email ou Nome de Utilizador") },
                         leadingIcon = {
                             Icon(imageVector = Icons.Default.Person, contentDescription = null)
                         },
@@ -146,7 +177,7 @@ fun LoginScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("username_input"),
+                            .testTag("login_email_or_username_input"),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
                             unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
@@ -182,7 +213,21 @@ fun LoginScreen(
                         )
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextButton(
+                        onClick = { showRecoveryDialog = true },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text(
+                            text = "Esqueceu-se da senha?",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Error Message
                     AnimatedVisibility(visible = authError != null) {
@@ -204,7 +249,7 @@ fun LoginScreen(
 
                     // Login Button
                     Button(
-                        onClick = { viewModel.login(username, password) },
+                        onClick = { viewModel.login(emailOrUsername, password) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
@@ -219,6 +264,126 @@ fun LoginScreen(
                             text = "Aceder ao Dashboard",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+                        Text(
+                            text = "ou",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Google Login Button
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+                                )
+                                    .requestEmail()
+                                    .build()
+                                val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+                                launcher.launch(googleSignInClient.signInIntent)
+                            } catch (e: Exception) {
+                                Log.e("LoginScreen", "Google Sign-In setup failed", e)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("google_login_button"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = "Google Icon",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Entrar com o Google",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // Recovery Password Dialog
+                    if (showRecoveryDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showRecoveryDialog = false },
+                            title = {
+                                Text(
+                                    text = "Recuperar Palavra-passe",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(
+                                        text = "Insira o seu email registado para receber um link de redefinição de palavra-passe.",
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                    OutlinedTextField(
+                                        value = recoveryEmail,
+                                        onValueChange = { recoveryEmail = it },
+                                        label = { Text("Email de Recuperação") },
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.fillMaxWidth().testTag("recovery_email_input"),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
+                                        )
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        viewModel.recoverPassword(recoveryEmail)
+                                        showRecoveryDialog = false
+                                        recoveryEmail = ""
+                                    },
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Enviar Link", fontWeight = FontWeight.Bold)
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showRecoveryDialog = false }) {
+                                    Text("Cancelar")
+                                }
+                            }
                         )
                     }
                 }

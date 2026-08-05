@@ -25,11 +25,21 @@ fun RegisterScreen(
     onNavigateBack: () -> Unit
 ) {
     val liveCalc by viewModel.liveCalculation.collectAsState()
+    val uiMessage by viewModel.uiMessage.collectAsState()
     var showMonthDialog by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(uiMessage) {
+        uiMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearUiMessage()
+        }
+    }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {

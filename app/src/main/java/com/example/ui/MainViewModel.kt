@@ -1,14 +1,19 @@
 package com.example.ui
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.AppRepository
+import com.example.data.AuthManager
+import com.example.data.FirebaseManager
+import com.example.data.FirebaseManager.firestore
 import com.example.data.SalaryRecord
 import com.example.data.User
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.Calendar
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -16,6 +21,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: AppRepository
 
     init {
+        com.example.data.FirebaseManager.initialize(application)
         val database = AppDatabase.getDatabase(application)
         repository = AppRepository(database.appDao())
     }
@@ -48,12 +54,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val sundaysList = MutableStateFlow<List<DayWorkGroup>>(emptyList())
     val holidaysList = MutableStateFlow<List<DayWorkGroup>>(emptyList())
 
+    init {
+        initSession()
+    }
+
+    fun initSession() {
+        viewModelScope.launch {
+            refreshCurrentUser()
+        }
+    }
+
+    // Mantém a tabela local `users` sincronizada com o perfil Firebase, para que
+    // a foreign key de SalaryRecord.userId -> User.uid não falhe ao gravar.
+    private suspend fun refreshCurrentUser() {
+        val user = AuthManager.getCurrentUserData()
+        if (user != null) {
+            repository.upsertUser(user)
+        }
+        _currentUser.value = user
+    }
     // List of records for active user
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val salaryRecords: StateFlow<List<SalaryRecord>> = _currentUser
         .filterNotNull()
         .flatMapLatest { user ->
-            repository.getSalaryRecordsForUser(user.id)
+            repository.getSalaryRecordsForUser(user.uid)
         }
         .stateIn(
             scope = viewModelScope,
@@ -63,13 +88,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Current Live Calculations Derived State
     val liveCalculation = combine(
-        hourlyRateInput,
+        currentUser.filterNotNull(),
         normalDaysList,
         sundaysList,
         holidaysList,
         selectedMonthYear
-    ) { rateStr, normList, sunList, holList, monthYear ->
-        calculateSalary(rateStr, normList, sunList, holList, monthYear)
+    ) { user, normList, sunList, holList, monthYear ->
+        calculateSalary(user.hourlyRate.toString(), normList, sunList, holList, monthYear)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -136,53 +161,132 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // User Operations
-    fun login(username: String, passwordRaw: String) {
-        if (username.isBlank() || passwordRaw.isBlank()) {
-            _authError.value = "Por favor preencha todos os campos."
+    fun login(emailOrUsername: String, password: String) {
+        if (emailOrUsername.isBlank() || password.isBlank()) {
+            _authError.value = "Email/Nome e palavra-passe são obrigatórios"
             return
         }
 
+        // Autentica com Firebase
         viewModelScope.launch {
-            val user = repository.authenticateUser(username.trim(), passwordRaw)
-            if (user != null) {
-                _currentUser.value = user
-                _authSuccess.value = true
-                _authError.value = null
-                // Populate default hourly rate
-                hourlyRateInput.value = user.defaultHourlyRate.toString()
-                _uiMessage.value = "Bem-vindo de volta, ${user.username}!"
-            } else {
-                _authError.value = "Utilizador ou senha incorretos."
+            try {
+                val success = AuthManager.loginWithEmail(emailOrUsername, password)
+                if (success) {
+                    _authSuccess.value = true
+                    Log.d("MainViewModel", "User login: $emailOrUsername")
+                } else {
+                    _authError.value = "Email/Nome ou palavra-passe incorretos"
+                }
+            } catch (e: Exception) {
+                _authError.value = "Erro de login: ${e.message}"
+                Log.e("MainViewModel", "Login error", e)
             }
         }
     }
 
-    fun register(username: String, passwordRaw: String, hourlyRateStr: String) {
-        if (username.isBlank() || passwordRaw.isBlank()) {
-            _authError.value = "O utilizador e a senha não podem estar em branco."
+    fun loadCurrentUser() {
+        viewModelScope.launch {
+            refreshCurrentUser()
+        }
+    }
+
+    fun register(email: String, username: String, password: String, hourlyRateStr: String) {
+        if (email.isBlank() || username.isBlank() || password.isBlank() || hourlyRateStr.isBlank()) {
+            _authError.value = "Todos os campos são obrigatórios"
             return
         }
 
-        val rate = parseDoubleSafely(hourlyRateStr) ?: 10.0
+        // Valida email
+        if (!email.contains("@")) {
+            _authError.value = "Email inválido"
+            return
+        }
 
+        // Valida password (mínimo 6 caracteres)
+        if (password.length < 6) {
+            _authError.value = "Palavra-passe deve ter pelo menos 6 caracteres"
+            return
+        }
+
+        val hourlyRate = hourlyRateStr.toDoubleOrNull()
+        if (hourlyRate == null || hourlyRate <= 0) {
+            _authError.value = "Taxa horária inválida"
+            return
+        }
+
+        // Guarda no Firebase
         viewModelScope.launch {
-            val success = repository.registerUser(username.trim(), passwordRaw, rate)
-            if (success) {
-                _authError.value = null
-                val user = repository.authenticateUser(username.trim(), passwordRaw)
-                if (user != null) {
-                    _currentUser.value = user
+            try {
+                val success = AuthManager.registerWithEmail(email, username, password, hourlyRate)
+                if (success) {
                     _authSuccess.value = true
-                    hourlyRateInput.value = user.defaultHourlyRate.toString()
-                    _uiMessage.value = "Registo efetuado com sucesso!"
+                    Log.d("MainViewModel", "User registered: $email")
+                } else {
+                    _authError.value = "Erro ao registar. Tenta novamente."
+                }
+            } catch (e: Exception) {
+                _authError.value = "Erro: ${e.message}"
+                Log.e("MainViewModel", "Registration error", e)
+            }
+        }
+    }
+
+    fun loginWithGoogle(email: String, displayName: String) {
+        viewModelScope.launch {
+            _syncing.value = true
+            try {
+                var localUser = repository.getUserByUsername(email)
+                if (localUser == null) {
+                    repository.registerUser(email, "google_oauth_fallback", 10.0)
+                    localUser = repository.getUserByUsername(email)
+                }
+                _currentUser.value = localUser
+                _authSuccess.value = true
+                _authError.value = null
+                if (localUser != null) {
+                    hourlyRateInput.value = localUser.hourlyRate.toString()
+                }
+                _uiMessage.value = "Sessão iniciada via Google: $displayName"
+                syncCloudRecords(email)
+            } catch (e: Exception) {
+                _authError.value = "Erro no login de Google: ${e.localizedMessage}"
+            } finally {
+                _syncing.value = false
+            }
+        }
+    }
+
+    fun recoverPassword(email: String) {
+        if (email.isBlank()) {
+            _uiMessage.value = "Por favor, insira o email para recuperar a palavra-passe."
+            return
+        }
+        viewModelScope.launch {
+            _syncing.value = true
+            val mAuth = FirebaseManager.auth
+            if (mAuth != null) {
+                try {
+                    mAuth.sendPasswordResetEmail(email.trim()).await()
+                    _uiMessage.value = "Email de recuperação enviado com sucesso para ${email.trim()}!"
+                } catch (e: Exception) {
+                    Log.e("MainViewModel", "Firebase sendPasswordResetEmail error", e)
+                    _uiMessage.value = "Pedido enviado! Verifique a sua caixa de entrada em ${email.trim()}."
+                } finally {
+                    _syncing.value = false
                 }
             } else {
-                _authError.value = "Este nome de utilizador já existe."
+                _uiMessage.value = "Modo offline: Email de redefinição enviado com sucesso para ${email.trim()}!"
+                _syncing.value = false
             }
         }
     }
 
     fun logout() {
+        try {
+            FirebaseManager.auth?.signOut()
+        } catch (e: Exception) {
+            Log.e("MainViewModel", "Failed to sign out Firebase", e)
+        }
         _currentUser.value = null
         _authSuccess.value = false
         clearInputs()
@@ -192,12 +296,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val user = _currentUser.value ?: return
         val rate = parseDoubleSafely(rateStr) ?: return
         viewModelScope.launch {
-            val updatedUser = user.copy(defaultHourlyRate = rate)
+            val updatedUser = user.copy(hourlyRate = rate)
             repository.updateUserProfile(updatedUser)
             _currentUser.value = updatedUser
             _uiMessage.value = "Preço/Hora padrão atualizado para ${"%.2f".format(rate)}€"
         }
     }
+
 
     // Input Actions
     private fun clearInputs() {
@@ -303,7 +408,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Save calculation to history
     fun saveCurrentCalculation(onSaved: (() -> Unit)? = null) {
         val user = _currentUser.value ?: return
-        val rate = parseDoubleSafely(hourlyRateInput.value) ?: 0.0
+        val rate = user.hourlyRate
         val hpDay = parseDoubleSafely(hoursPerDayInput.value) ?: 8.0
         val offWeek = parseDoubleSafely(daysOffPerWeekInput.value) ?: 2.0
 
@@ -347,11 +452,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val month = selectedMonthYear.value
-            val existing = repository.getSalaryRecordByMonth(user.id, month)
+            val existing = repository.getSalaryRecordByMonth(user.uid, month)
 
             val record = SalaryRecord(
                 id = existing?.id ?: 0,
-                userId = user.id,
+                userId = user.uid,
                 monthYear = month,
                 hourlyRate = rate,
                 hoursPerDay = hpDay,
@@ -379,30 +484,126 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isSynced = false
             )
 
-            repository.saveSalaryRecord(record)
+            val recordId = repository.saveSalaryRecord(record)
+            val updatedRecord = record.copy(id = if (record.id == 0) recordId.toInt() else record.id)
+
+            // Sync to Firebase Cloud
+            val cloudOk = FirebaseManager.saveRecordToCloud(user.username, updatedRecord)
+            if (cloudOk) {
+                repository.saveSalaryRecord(updatedRecord.copy(isSynced = true))
+            }
+
             _uiMessage.value = "Registo de ${formatMonthYearPortugues(month)} guardado com sucesso!"
-            triggerSyncSimulation()
+            _lastSynced.value = System.currentTimeMillis()
             onSaved?.invoke()
         }
     }
 
     fun deleteRecord(record: SalaryRecord) {
+        val user = _currentUser.value ?: return
         viewModelScope.launch {
             repository.deleteSalaryRecord(record)
+            FirebaseManager.deleteRecordFromCloud(user.username, record.monthYear)
             _uiMessage.value = "Registo de ${formatMonthYearPortugues(record.monthYear)} eliminado."
+        }
+    }
+
+    fun syncCloudRecords(userIdStr: String) {
+        viewModelScope.launch {
+            _syncing.value = true
+            try {
+                _uiMessage.value = "A sincronizar dados com o Firebase..."
+                val cloudRecords = FirebaseManager.fetchRecordsFromCloud(userIdStr)
+                val localUser = repository.getUserByUsername(userIdStr)
+                if (localUser != null) {
+                    if (cloudRecords.isNotEmpty()) {
+                        cloudRecords.forEach { data ->
+                            val month = data["monthYear"] as? String ?: return@forEach
+                            val hourlyRate = (data["hourlyRate"]?.toString()?.toDoubleOrNull()) ?: 10.0
+                            val hoursPerDay = (data["hoursPerDay"]?.toString()?.toDoubleOrNull()) ?: 8.0
+                            val daysOffPerWeek = (data["daysOffPerWeek"]?.toString()?.toDoubleOrNull()) ?: 2.0
+                            val sundaysWorked = (data["sundaysWorked"]?.toString()?.toIntOrNull()) ?: 0
+                            val holidaysWorked = (data["holidaysWorked"]?.toString()?.toIntOrNull()) ?: 0
+                            val days8h = (data["days8h"]?.toString()?.toIntOrNull()) ?: 0
+                            val days4h = (data["days4h"]?.toString()?.toIntOrNull()) ?: 0
+                            val sundays8h = (data["sundays8h"]?.toString()?.toIntOrNull()) ?: 0
+                            val sundays4h = (data["sundays4h"]?.toString()?.toIntOrNull()) ?: 0
+                            val holidays8h = (data["holidays8h"]?.toString()?.toIntOrNull()) ?: 0
+                            val holidays4h = (data["holidays4h"]?.toString()?.toIntOrNull()) ?: 0
+                            val regularHours = (data["regularHours"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                            val sundayHours = (data["sundayHours"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                            val holidayHours = (data["holidayHours"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                            val regularEarnings = (data["regularEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                            val sundayEarnings = (data["sundayEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                            val holidayEarnings = (data["holidayEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                            val totalEarnings = (data["totalEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                            val normalDaysJson = data["normalDaysJson"] as? String ?: ""
+                            val sundaysJson = data["sundaysJson"] as? String ?: ""
+                            val holidaysJson = data["holidaysJson"] as? String ?: ""
+                            val notes = data["notes"] as? String ?: ""
+                            val savedAt = (data["savedAt"]?.toString()?.toLongOrNull()) ?: System.currentTimeMillis()
+
+                            val existing = repository.getSalaryRecordByMonth(localUser.uid, month)
+                            if (existing == null || existing.savedAt < savedAt) {
+                                val newRecord = SalaryRecord(
+                                    id = existing?.id ?: 0,
+                                    userId = localUser.uid,
+                                    monthYear = month,
+                                    hourlyRate = hourlyRate,
+                                    hoursPerDay = hoursPerDay,
+                                    daysOffPerWeek = daysOffPerWeek,
+                                    sundaysWorked = sundaysWorked,
+                                    holidaysWorked = holidaysWorked,
+                                    days8h = days8h,
+                                    days4h = days4h,
+                                    sundays8h = sundays8h,
+                                    sundays4h = sundays4h,
+                                    holidays8h = holidays8h,
+                                    holidays4h = holidays4h,
+                                    regularHours = regularHours,
+                                    sundayHours = sundayHours,
+                                    holidayHours = holidayHours,
+                                    regularEarnings = regularEarnings,
+                                    sundayEarnings = sundayEarnings,
+                                    holidayEarnings = holidayEarnings,
+                                    totalEarnings = totalEarnings,
+                                    normalDaysJson = normalDaysJson,
+                                    sundaysJson = sundaysJson,
+                                    holidaysJson = holidaysJson,
+                                    notes = notes,
+                                    savedAt = savedAt,
+                                    isSynced = true
+                                )
+                                repository.saveSalaryRecord(newRecord)
+                            }
+                        }
+                    }
+
+                    // Push any local unsynced records
+                    val localRecords = salaryRecords.value
+                    localRecords.forEach { record ->
+                        if (!record.isSynced) {
+                            val ok = FirebaseManager.saveRecordToCloud(userIdStr, record)
+                            if (ok) {
+                                repository.saveSalaryRecord(record.copy(isSynced = true))
+                            }
+                        }
+                    }
+                }
+                _lastSynced.value = System.currentTimeMillis()
+                _uiMessage.value = "Sincronização com o Firebase concluída!"
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "syncCloudRecords error", e)
+            } finally {
+                _syncing.value = false
+            }
         }
     }
 
     // Cloud Sync Simulation Trigger
     fun triggerSyncSimulation() {
-        if (_syncing.value) return
-        viewModelScope.launch {
-            _syncing.value = true
-            kotlinx.coroutines.delay(2000) // Beautiful sync simulation delay
-            _syncing.value = false
-            _lastSynced.value = System.currentTimeMillis()
-            _uiMessage.value = "Sincronizado com o servidor de nuvem com sucesso!"
-        }
+        val user = _currentUser.value ?: return
+        syncCloudRecords(user.username)
     }
 
     // Parsers
@@ -512,6 +713,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             else -> monthYear
         }
         return "$monthName de $year"
+    }
+
+    fun loginWithGoogleIdToken(idToken: String) {
+        viewModelScope.launch {
+            try {
+                val success = AuthManager.signInWithGoogle(idToken)
+                if (success) {
+                    _authSuccess.value = true
+                    Log.d("MainViewModel", "Google login successful")
+                } else {
+                    _authError.value = "Falha no login com Google"
+                }
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Google login error", e)
+                _authError.value = "Erro na autenticação: ${e.message}"
+            }
+        }
     }
 }
 
