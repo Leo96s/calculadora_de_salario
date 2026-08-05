@@ -502,7 +502,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val updatedRecord = record.copy(id = if (record.id == 0) recordId.toInt() else record.id)
 
             // Sync to Firebase Cloud
-            val cloudOk = FirebaseManager.saveRecordToCloud(user.username, updatedRecord)
+            val cloudOk = FirebaseManager.saveRecordToCloud(user.uid, updatedRecord)
             if (cloudOk) {
                 repository.saveSalaryRecord(updatedRecord.copy(isSynced = true))
             }
@@ -517,90 +517,87 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val user = _currentUser.value ?: return
         viewModelScope.launch {
             repository.deleteSalaryRecord(record)
-            FirebaseManager.deleteRecordFromCloud(user.username, record.monthYear)
+            FirebaseManager.deleteRecordFromCloud(user.uid, record.monthYear)
             _uiMessage.value = "Registo de ${formatMonthYearPortugues(record.monthYear)} eliminado."
         }
     }
 
-    fun syncCloudRecords(userIdStr: String) {
+    fun syncCloudRecords(uid: String) {
         viewModelScope.launch {
             _syncing.value = true
             try {
                 _uiMessage.value = "A sincronizar dados com o Firebase..."
-                val cloudRecords = FirebaseManager.fetchRecordsFromCloud(userIdStr)
-                val localUser = repository.getUserByUsername(userIdStr)
-                if (localUser != null) {
-                    if (cloudRecords.isNotEmpty()) {
-                        cloudRecords.forEach { data ->
-                            val month = data["monthYear"] as? String ?: return@forEach
-                            val hourlyRate = (data["hourlyRate"]?.toString()?.toDoubleOrNull()) ?: 10.0
-                            val hoursPerDay = (data["hoursPerDay"]?.toString()?.toDoubleOrNull()) ?: 8.0
-                            val daysOffPerWeek = (data["daysOffPerWeek"]?.toString()?.toDoubleOrNull()) ?: 2.0
-                            val sundaysWorked = (data["sundaysWorked"]?.toString()?.toIntOrNull()) ?: 0
-                            val holidaysWorked = (data["holidaysWorked"]?.toString()?.toIntOrNull()) ?: 0
-                            val days8h = (data["days8h"]?.toString()?.toIntOrNull()) ?: 0
-                            val days4h = (data["days4h"]?.toString()?.toIntOrNull()) ?: 0
-                            val sundays8h = (data["sundays8h"]?.toString()?.toIntOrNull()) ?: 0
-                            val sundays4h = (data["sundays4h"]?.toString()?.toIntOrNull()) ?: 0
-                            val holidays8h = (data["holidays8h"]?.toString()?.toIntOrNull()) ?: 0
-                            val holidays4h = (data["holidays4h"]?.toString()?.toIntOrNull()) ?: 0
-                            val regularHours = (data["regularHours"]?.toString()?.toDoubleOrNull()) ?: 0.0
-                            val sundayHours = (data["sundayHours"]?.toString()?.toDoubleOrNull()) ?: 0.0
-                            val holidayHours = (data["holidayHours"]?.toString()?.toDoubleOrNull()) ?: 0.0
-                            val regularEarnings = (data["regularEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
-                            val sundayEarnings = (data["sundayEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
-                            val holidayEarnings = (data["holidayEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
-                            val totalEarnings = (data["totalEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
-                            val normalDaysJson = data["normalDaysJson"] as? String ?: ""
-                            val sundaysJson = data["sundaysJson"] as? String ?: ""
-                            val holidaysJson = data["holidaysJson"] as? String ?: ""
-                            val notes = data["notes"] as? String ?: ""
-                            val savedAt = (data["savedAt"]?.toString()?.toLongOrNull()) ?: System.currentTimeMillis()
+                val cloudRecords = FirebaseManager.fetchRecordsFromCloud(uid)
+                if (cloudRecords.isNotEmpty()) {
+                    cloudRecords.forEach { data ->
+                        val month = data["monthYear"] as? String ?: return@forEach
+                        val hourlyRate = (data["hourlyRate"]?.toString()?.toDoubleOrNull()) ?: 10.0
+                        val hoursPerDay = (data["hoursPerDay"]?.toString()?.toDoubleOrNull()) ?: 8.0
+                        val daysOffPerWeek = (data["daysOffPerWeek"]?.toString()?.toDoubleOrNull()) ?: 2.0
+                        val sundaysWorked = (data["sundaysWorked"]?.toString()?.toIntOrNull()) ?: 0
+                        val holidaysWorked = (data["holidaysWorked"]?.toString()?.toIntOrNull()) ?: 0
+                        val days8h = (data["days8h"]?.toString()?.toIntOrNull()) ?: 0
+                        val days4h = (data["days4h"]?.toString()?.toIntOrNull()) ?: 0
+                        val sundays8h = (data["sundays8h"]?.toString()?.toIntOrNull()) ?: 0
+                        val sundays4h = (data["sundays4h"]?.toString()?.toIntOrNull()) ?: 0
+                        val holidays8h = (data["holidays8h"]?.toString()?.toIntOrNull()) ?: 0
+                        val holidays4h = (data["holidays4h"]?.toString()?.toIntOrNull()) ?: 0
+                        val regularHours = (data["regularHours"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                        val sundayHours = (data["sundayHours"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                        val holidayHours = (data["holidayHours"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                        val regularEarnings = (data["regularEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                        val sundayEarnings = (data["sundayEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                        val holidayEarnings = (data["holidayEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                        val totalEarnings = (data["totalEarnings"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                        val normalDaysJson = data["normalDaysJson"] as? String ?: ""
+                        val sundaysJson = data["sundaysJson"] as? String ?: ""
+                        val holidaysJson = data["holidaysJson"] as? String ?: ""
+                        val notes = data["notes"] as? String ?: ""
+                        val savedAt = (data["savedAt"]?.toString()?.toLongOrNull()) ?: System.currentTimeMillis()
 
-                            val existing = repository.getSalaryRecordByMonth(localUser.uid, month)
-                            if (existing == null || existing.savedAt < savedAt) {
-                                val newRecord = SalaryRecord(
-                                    id = existing?.id ?: 0,
-                                    userId = localUser.uid,
-                                    monthYear = month,
-                                    hourlyRate = hourlyRate,
-                                    hoursPerDay = hoursPerDay,
-                                    daysOffPerWeek = daysOffPerWeek,
-                                    sundaysWorked = sundaysWorked,
-                                    holidaysWorked = holidaysWorked,
-                                    days8h = days8h,
-                                    days4h = days4h,
-                                    sundays8h = sundays8h,
-                                    sundays4h = sundays4h,
-                                    holidays8h = holidays8h,
-                                    holidays4h = holidays4h,
-                                    regularHours = regularHours,
-                                    sundayHours = sundayHours,
-                                    holidayHours = holidayHours,
-                                    regularEarnings = regularEarnings,
-                                    sundayEarnings = sundayEarnings,
-                                    holidayEarnings = holidayEarnings,
-                                    totalEarnings = totalEarnings,
-                                    normalDaysJson = normalDaysJson,
-                                    sundaysJson = sundaysJson,
-                                    holidaysJson = holidaysJson,
-                                    notes = notes,
-                                    savedAt = savedAt,
-                                    isSynced = true
-                                )
-                                repository.saveSalaryRecord(newRecord)
-                            }
+                        val existing = repository.getSalaryRecordByMonth(uid, month)
+                        if (existing == null || existing.savedAt < savedAt) {
+                            val newRecord = SalaryRecord(
+                                id = existing?.id ?: 0,
+                                userId = uid,
+                                monthYear = month,
+                                hourlyRate = hourlyRate,
+                                hoursPerDay = hoursPerDay,
+                                daysOffPerWeek = daysOffPerWeek,
+                                sundaysWorked = sundaysWorked,
+                                holidaysWorked = holidaysWorked,
+                                days8h = days8h,
+                                days4h = days4h,
+                                sundays8h = sundays8h,
+                                sundays4h = sundays4h,
+                                holidays8h = holidays8h,
+                                holidays4h = holidays4h,
+                                regularHours = regularHours,
+                                sundayHours = sundayHours,
+                                holidayHours = holidayHours,
+                                regularEarnings = regularEarnings,
+                                sundayEarnings = sundayEarnings,
+                                holidayEarnings = holidayEarnings,
+                                totalEarnings = totalEarnings,
+                                normalDaysJson = normalDaysJson,
+                                sundaysJson = sundaysJson,
+                                holidaysJson = holidaysJson,
+                                notes = notes,
+                                savedAt = savedAt,
+                                isSynced = true
+                            )
+                            repository.saveSalaryRecord(newRecord)
                         }
                     }
+                }
 
-                    // Push any local unsynced records
-                    val localRecords = salaryRecords.value
-                    localRecords.forEach { record ->
-                        if (!record.isSynced) {
-                            val ok = FirebaseManager.saveRecordToCloud(userIdStr, record)
-                            if (ok) {
-                                repository.saveSalaryRecord(record.copy(isSynced = true))
-                            }
+                // Push any local unsynced records
+                val localRecords = salaryRecords.value
+                localRecords.forEach { record ->
+                    if (!record.isSynced) {
+                        val ok = FirebaseManager.saveRecordToCloud(uid, record)
+                        if (ok) {
+                            repository.saveSalaryRecord(record.copy(isSynced = true))
                         }
                     }
                 }
@@ -617,7 +614,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Cloud Sync Simulation Trigger
     fun triggerSyncSimulation() {
         val user = _currentUser.value ?: return
-        syncCloudRecords(user.username)
+        syncCloudRecords(user.uid)
     }
 
     // Parsers

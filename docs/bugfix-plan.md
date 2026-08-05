@@ -171,25 +171,25 @@ o fallback "Utilizador" (não fica presa).
 
 ## Fase 2 — Segurança / dados
 
-### [ ] 2.1 Sincronização cloud grava no caminho errado do Firestore
+### [x] 2.1 Sincronização cloud grava no caminho errado do Firestore — RESOLVIDO
 
 **Problema:** o perfil do utilizador vive em `users/{uid}`
-(`AuthManager.kt:79-83`), mas os registos salariais são gravados/lidos em
-`users/{username}/salary_records/...`
-(`MainViewModel.kt:481,496,596` chamam `FirebaseManager.saveRecordToCloud`
-/`deleteRecordFromCloud`/`fetchRecordsFromCloud` com `user.username`).
-Isto ou parte a sincronização (se as regras exigirem `auth.uid ==
-userId`), ou permite a dois utilizadores com o mesmo username lerem/
-escreverem os registos um do outro.
+(`AuthManager.kt:79-83`), mas os registos salariais eram gravados/lidos em
+`users/{username}/salary_records/...`. Com as regras do Firestore
+corrigidas (item 0.1), isto passou de "inseguro" a "sempre falha com
+PERMISSION_DENIED" — confirmado no emulador antes desta correção.
 
-**Correção:** trocar `user.username` por `user.uid` nas três chamadas em
-`MainViewModel.kt`.
+**Correção aplicada:** trocado `user.username` por `user.uid` nas
+chamadas de `saveCurrentCalculation()`, `deleteRecord()` e
+`triggerSyncSimulation()`. `syncCloudRecords(userIdStr: String)` foi
+renomeado para `syncCloudRecords(uid: String)` e deixou de fazer uma
+lookup local por `getUserByUsername(userIdStr)` — usa o `uid` recebido
+diretamente (o lookup só servia para obter o `.uid`, que já vinha por
+parâmetro).
 
-**Teste:** só depois de 1.1 estar resolvido — guardar um registo, verificar
-na consola Firestore que aparece em `users/{uid}/salary_records/...`, e
-que sincroniza corretamente noutro dispositivo/sessão com o mesmo login.
-
-**Depende de:** 1.1 (sem isso não há registos para testar a sincronização).
+**Validado no emulador:** conta nova → guardar registo → logcat confirma
+`Record saved successfully: <uid>_2026-08` (documento chaveado pelo uid,
+sem `PERMISSION_DENIED`) → botão de sincronizar não reporta erros.
 
 ---
 
