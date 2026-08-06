@@ -1,3 +1,5 @@
+## v1.2.21 - 2026-08-06
+* fix(auth): request ID token in Google Sign-In flow
 ## v1.2.20 - 2026-08-05
 * ci: sync mobile-release.yml (bot-commit exclusion in change-diff)
 ## v1.2.19 - 2026-08-05

@@ -15,8 +15,8 @@ android {
     applicationId = "com.salariocalculator.pwtqzs"
     minSdk = 24
     targetSdk = 36
-    versionCode = 7
-    versionName = "1.2.20"
+    versionCode = 8
+    versionName = "1.2.21"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
