@@ -168,6 +168,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _authSuccess.value = false
     }
 
+    fun setAuthError(message: String) {
+        _authError.value = message
+    }
+
     // User Operations
     fun login(email: String, password: String) {
         if (email.isBlank() || password.isBlank()) {

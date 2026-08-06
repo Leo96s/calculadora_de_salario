@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import com.example.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -65,9 +66,13 @@ fun LoginScreen(
                 if (account != null && account.idToken != null) {
                     // Chama a função de login do AuthManager
                     viewModel.loginWithGoogleIdToken(account.idToken!!)
+                } else {
+                    Log.e("LoginScreen", "Google Sign-In returned no idToken")
+                    viewModel.setAuthError("Não foi possível obter os dados da conta Google")
                 }
             } catch (e: Exception) {
                 Log.e("LoginScreen", "Google Sign-In failed", e)
+                viewModel.setAuthError("Erro no login com Google: ${e.message}")
             }
         }
     }
@@ -313,11 +318,13 @@ fun LoginScreen(
                                     com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
                                 )
                                     .requestEmail()
+                                    .requestIdToken(context.getString(R.string.default_web_client_id))
                                     .build()
                                 val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
                                 launcher.launch(googleSignInClient.signInIntent)
                             } catch (e: Exception) {
                                 Log.e("LoginScreen", "Google Sign-In setup failed", e)
+                                viewModel.setAuthError("Erro ao iniciar login com Google: ${e.message}")
                             }
                         },
                         modifier = Modifier

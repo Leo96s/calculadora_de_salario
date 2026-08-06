@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import com.example.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -62,11 +63,13 @@ fun SignUpScreen(
                 if (account != null && account.idToken != null) {
                     // Chama com idToken real - só entra se o Google Sign-In foi bem-sucedido
                     viewModel.loginWithGoogleIdToken(account.idToken!!)
+                } else {
+                    Log.e("SignUpScreen", "Google Sign-In returned no idToken")
+                    viewModel.setAuthError("Não foi possível obter os dados da conta Google")
                 }
-                // Se account for null ou não tiver idToken, não faz nada (fica na tela de signup)
             } catch (e: Exception) {
                 Log.e("SignUpScreen", "Google Sign-In failed", e)
-                // Se houver erro, não entra (fica na tela)
+                viewModel.setAuthError("Erro no registo com Google: ${e.message}")
             }
         }
         // Se cancelar (resultCode != RESULT_OK), não faz nada
@@ -316,11 +319,13 @@ fun SignUpScreen(
                                     com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
                                 )
                                     .requestEmail()
+                                    .requestIdToken(context.getString(R.string.default_web_client_id))
                                     .build()
                                 val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
                                 launcher.launch(googleSignInClient.signInIntent)
                             } catch (e: Exception) {
                                 Log.e("SignUpScreen", "Google Sign-In setup failed", e)
+                                viewModel.setAuthError("Erro ao iniciar registo com Google: ${e.message}")
                             }
                         },
                         modifier = Modifier
