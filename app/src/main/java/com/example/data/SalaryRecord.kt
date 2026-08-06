@@ -47,6 +47,10 @@ data class SalaryRecord(
     val holidayEarnings: Double,
     val totalEarnings: Double,
 
+    val socialSecurityAmount: Double = 0.0,
+    val irsAmount: Double = 0.0,
+    val netEarnings: Double = 0.0,
+
     val normalDaysJson: String = "",
     val sundaysJson: String = "",
     val holidaysJson: String = "",

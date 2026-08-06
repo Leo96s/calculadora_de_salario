@@ -50,7 +50,8 @@ import java.util.*
 fun DashboardScreen(
     viewModel: MainViewModel,
     onNavigateToLogin: () -> Unit,
-    onNavigateToRegister: () -> Unit
+    onNavigateToRegister: () -> Unit,
+    onNavigateToSettings: () -> Unit
 ) {
     val currentUser by viewModel.currentUser.collectAsState()
     val isProfileLoading by viewModel.isProfileLoading.collectAsState()
@@ -61,8 +62,6 @@ fun DashboardScreen(
     val uiMessage by viewModel.uiMessage.collectAsState()
 
     var showMonthDialog by remember { mutableStateOf(false) }
-    var showEditDefaultRateDialog by remember { mutableStateOf(false) }
-    var defaultRateInput by remember { mutableStateOf("") }
 
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -132,7 +131,7 @@ fun DashboardScreen(
                     }
 
                     IconButton(
-                        onClick = { showEditDefaultRateDialog = true },
+                        onClick = onNavigateToSettings,
                         modifier = Modifier
                             .padding(end = 4.dp)
                             .background(
@@ -142,7 +141,7 @@ fun DashboardScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Preço Hora Padrão",
+                            contentDescription = "Definições",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
@@ -394,6 +393,14 @@ fun DashboardScreen(
                 }
             }
 
+            // 2.5 Retention Summary Card (quanto o Estado fica)
+            val retentionRecord = currentMonthRecord ?: prevMonthRecord
+            if (retentionRecord != null) {
+                item {
+                    RetentionSummaryCard(record = retentionRecord)
+                }
+            }
+
             // 3. Trend Graph
             if (records.isNotEmpty()) {
                 item {
@@ -463,46 +470,6 @@ fun DashboardScreen(
         )
     }
 
-    // Edit Default Hourly Rate Dialog
-    if (showEditDefaultRateDialog) {
-        AlertDialog(
-            onDismissRequest = { showEditDefaultRateDialog = false },
-            title = { Text("Preço Base por Hora") },
-            text = {
-                Column {
-                    Text(
-                        text = "Define o valor padrão que costumas receber por hora. Isto será usado para pré-preencher novas consultas.",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    OutlinedTextField(
-                        value = defaultRateInput,
-                        onValueChange = { defaultRateInput = it },
-                        label = { Text("Valor à hora (€)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.updateDefaultRate(defaultRateInput)
-                        showEditDefaultRateDialog = false
-                    }
-                ) {
-                    Text("Guardar")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditDefaultRateDialog = false }) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    }
 }
 
 @Composable
@@ -1107,6 +1074,91 @@ fun HistoryItemCard(
                     )
                     LabelValueItem(label = "P/ Hora", value = "${"%.2f".format(record.hourlyRate)}€")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun RetentionSummaryCard(record: SalaryRecord) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(
+                text = "Retenções do Mês",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                LabelValueItem(label = "Bruto", value = "${"%.2f".format(record.totalEarnings)}€")
+                LabelValueItem(
+                    label = "Segurança Social (-11%)",
+                    value = "-${"%.2f".format(record.socialSecurityAmount)}€"
+                )
+                LabelValueItem(label = "IRS Retido", value = "-${"%.2f".format(record.irsAmount)}€")
+            }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                modifier = Modifier.padding(vertical = 12.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Líquido a Receber",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "${"%.2f".format(record.netEarnings)}€",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "Estimativa baseada nas tabelas oficiais de retenção na fonte; " +
+                        "confirma com o teu TOC para a tua situação fiscal exata.",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
             }
         }
     }

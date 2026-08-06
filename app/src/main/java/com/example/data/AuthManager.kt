@@ -149,6 +149,25 @@ object AuthManager {
         }
     }
 
+    suspend fun updateFiscalSettings(uid: String, maritalStatus: String, dependents: Int, region: String): Boolean {
+        return try {
+            FirebaseManager.firestore?.collection("users")
+                ?.document(uid)
+                ?.update(
+                    mapOf(
+                        "maritalStatus" to maritalStatus,
+                        "dependents" to dependents,
+                        "region" to region
+                    )
+                )
+                ?.await()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update fiscal settings", e)
+            false
+        }
+    }
+
     suspend fun loginWithEmail(email: String, password: String): Boolean {
         return try {
             val result = FirebaseManager.auth?.signInWithEmailAndPassword(email, password)?.await()

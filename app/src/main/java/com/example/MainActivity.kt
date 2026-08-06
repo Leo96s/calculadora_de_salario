@@ -29,6 +29,7 @@ import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.SignUpScreen
 import com.example.ui.screens.RegisterScreen
+import com.example.ui.screens.SettingsScreen
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
 
@@ -106,12 +107,24 @@ fun SalaryCalculatorApp() {
                 },
                 onNavigateToRegister = {
                     navController.navigate("register")
+                },
+                onNavigateToSettings = {
+                    navController.navigate("settings")
                 }
             )
         }
 
         composable("register") {
             RegisterScreen(
+                viewModel = viewModel,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable("settings") {
+            SettingsScreen(
                 viewModel = viewModel,
                 onNavigateBack = {
                     navController.popBackStack()

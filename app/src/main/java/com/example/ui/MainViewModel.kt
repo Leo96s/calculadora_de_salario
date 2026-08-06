@@ -11,6 +11,10 @@ import com.example.data.FirebaseManager
 import com.example.data.FirebaseManager.firestore
 import com.example.data.SalaryRecord
 import com.example.data.User
+import com.example.domain.IrsWithholdingCalculator
+import com.example.domain.MaritalStatus
+import com.example.domain.SocialSecurityCalculator
+import com.example.domain.TaxRegion
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -102,7 +106,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         holidaysList,
         selectedMonthYear
     ) { user, normList, sunList, holList, monthYear ->
-        calculateSalary(user.hourlyRate.toString(), normList, sunList, holList, monthYear)
+        calculateSalary(
+            user.hourlyRate.toString(),
+            normList,
+            sunList,
+            holList,
+            monthYear,
+            user.maritalStatus,
+            user.dependents,
+            user.region
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -304,6 +317,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateFiscalSettings(maritalStatus: String, dependentsStr: String, region: String) {
+        val user = _currentUser.value ?: return
+        val dependents = dependentsStr.toIntOrNull()
+        if (dependents == null || dependents < 0) {
+            _uiMessage.value = "Número de dependentes inválido."
+            return
+        }
+        viewModelScope.launch {
+            // Mesma ordem de escrita que updateDefaultRate: Firestore primeiro,
+            // Room depois — refreshCurrentUser() sobrepõe a tabela local a
+            // cada entrada no Dashboard, por isso uma escrita só local seria
+            // desfeita.
+            val cloudOk = AuthManager.updateFiscalSettings(user.uid, maritalStatus, dependents, region)
+            if (cloudOk) {
+                val updatedUser = user.copy(
+                    maritalStatus = maritalStatus,
+                    dependents = dependents,
+                    region = region
+                )
+                repository.updateUserProfile(updatedUser)
+                _currentUser.value = updatedUser
+                _uiMessage.value = "Definições fiscais atualizadas."
+            } else {
+                _uiMessage.value = "Não foi possível atualizar as definições fiscais. Tenta novamente."
+            }
+        }
+    }
+
 
     // Input Actions
     private fun clearInputs() {
@@ -477,6 +518,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sundayEarnings = calc.sundayEarnings,
                 holidayEarnings = calc.holidayEarnings,
                 totalEarnings = calc.totalEarnings,
+                socialSecurityAmount = calc.socialSecurityAmount,
+                irsAmount = calc.irsAmount,
+                netEarnings = calc.netEarnings,
                 normalDaysJson = DayWorkGroup.serialize(normListVal),
                 sundaysJson = DayWorkGroup.serialize(sunListVal),
                 holidaysJson = DayWorkGroup.serialize(holListVal),
@@ -616,7 +660,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         normList: List<DayWorkGroup>,
         sunList: List<DayWorkGroup>,
         holList: List<DayWorkGroup>,
-        monthYearStr: String
+        monthYearStr: String,
+        maritalStatus: String = "NAO_CASADO",
+        dependents: Int = 0,
+        region: String = "CONTINENTE"
     ): CalculationResult {
         val rate = parseDoubleSafely(rateStr) ?: 0.0
         val daysInMonth = getDaysInMonth(monthYearStr)
@@ -665,6 +712,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val holEarnings = holidayHours * rate * 3.0 // Triple
         val total = regEarnings + sunEarnings + holEarnings
 
+        // Nunca confiar cegamente que o valor gravado em User é um nome de
+        // enum válido (pode ficar desatualizado se o enum mudar no futuro).
+        val estadoCivil = runCatching { MaritalStatus.valueOf(maritalStatus) }
+            .getOrDefault(MaritalStatus.NAO_CASADO)
+        val regiaoFiscal = runCatching { TaxRegion.valueOf(region) }
+            .getOrDefault(TaxRegion.CONTINENTE)
+
+        val socialSecurityAmount = SocialSecurityCalculator.calcular(total)
+        val irsAmount = IrsWithholdingCalculator.calcular(total, estadoCivil, dependents, regiaoFiscal)
+        val netEarnings = total - socialSecurityAmount - irsAmount
+
         return CalculationResult(
             rate = rate,
             hoursPerDay = 8.0,
@@ -685,7 +743,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             regularEarnings = regEarnings,
             sundayEarnings = sunEarnings,
             holidayEarnings = holEarnings,
-            totalEarnings = total
+            totalEarnings = total,
+            socialSecurityAmount = socialSecurityAmount,
+            irsAmount = irsAmount,
+            netEarnings = netEarnings
         )
     }
 
@@ -751,5 +812,8 @@ data class CalculationResult(
     val regularEarnings: Double = 0.0,
     val sundayEarnings: Double = 0.0,
     val holidayEarnings: Double = 0.0,
-    val totalEarnings: Double = 0.0
+    val totalEarnings: Double = 0.0,
+    val socialSecurityAmount: Double = 0.0,
+    val irsAmount: Double = 0.0,
+    val netEarnings: Double = 0.0
 )

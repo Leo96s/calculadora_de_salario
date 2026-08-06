@@ -14,5 +14,8 @@ data class User(
     val email: String = "",
     val username: String = "",
     val passwordHash: String = "",
-    val hourlyRate: Double = 10.0
+    val hourlyRate: Double = 10.0,
+    val maritalStatus: String = "NAO_CASADO",
+    val dependents: Int = 0,
+    val region: String = "CONTINENTE"
 )
