@@ -1,3 +1,5 @@
+## v1.3.1 - 2026-09-27
+* chore: link repository to Infisical project
 ## v1.3.0 - 2026-08-10
 * feat(salary): calculate net salary with Social Security and IRS withholding
 ## v1.2.21 - 2026-08-06
